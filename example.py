@@ -21,7 +21,7 @@ def main() -> int:
         print("\nPredictions query:")
         resp = client.get_predictions(
             time=int(time.time()),
-            tag=["ncaab", "basketball"],
+            tag=["cbb", "games"],
             tags_mode="all",
             limit=50,
         )

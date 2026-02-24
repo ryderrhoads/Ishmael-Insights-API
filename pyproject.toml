@@ -25,7 +25,7 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://ishmaelinsights.com"
+Homepage = "https://ishmaelinsights.com/api-docs"
 Repository = "https://github.com/ryderrhoads/Ishmael-Insights-API"
 
 [tool.setuptools]
