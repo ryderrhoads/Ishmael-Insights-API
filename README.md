@@ -1,6 +1,6 @@
 # Ishmael Insights API (Python)
 
-Small Python SDK for the Ishmael Insights public API.
+Python SDK for the Ishmael Insights public API (`/api/v1`).
 
 ## Install
 
@@ -20,8 +20,8 @@ print(auth)
 
 preds = client.get_predictions(
     time=1700000000,
-    tag=["ncaab", "basketball"],
-    tags_mode="all",
+    tag=["cbb"],
+    tags_mode="any",
     limit=50,
 )
 print(preds.get("count"), "rows")
@@ -30,12 +30,33 @@ print(preds.get("count"), "rows")
 ## Endpoints wrapped
 
 - `POST /api/v1/auth/check` → `auth_check()`
-- `GET /api/v1/predictions` → `get_predictions(...)`
-- `GET /api/v1/games` → `get_games(...)`
-- `GET /api/v1/teams` → `get_teams(...)`
+- `GET /api/v1/predictions` → `get_predictions(...)`, `iter_predictions(...)`
+- `GET /api/v1/games` → `get_games(...)`, `iter_games(...)`
+- `GET /api/v1/game` → `get_game(...)`
+- `GET /api/v1/teams` → `get_teams(...)`, `iter_teams(...)`
 - `GET /api/v1/team` → `get_team(...)`
 
-> Note: games/teams/team methods are included so this package is ready once those endpoints are live.
+## CBB CSV export sample
+
+One script fetches all CBB teams, today's CBB games, and latest CBB model predictions, then exports CSVs:
+
+```bash
+python examples/export_cbb_snapshot_csv.py
+```
+
+Output files (default `exports/`):
+
+- `cbb_teams.csv`
+- `cbb_games_today.csv`
+- `cbb_predictions_latest.csv`
+- `cbb_predictions_for_today_games.csv`
+
+You can override via env vars:
+
+- `API_KEY`
+- `BASE_URL` (default `https://ishmaelinsights.com`)
+- `LEAGUE` (default `cbb`)
+- `OUT_DIR` (default `exports`)
 
 ## Dev
 
@@ -44,4 +65,5 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -e .
 python example.py
+python examples/export_cbb_snapshot_csv.py
 ```
