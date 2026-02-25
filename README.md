@@ -4,8 +4,30 @@ Python SDK for the Ishmael Insights public API (`/api/v1`).
 
 ## Install
 
+Local editable install (for development in this repo):
+
 ```bash
 pip install -e .
+```
+
+Install in another project directly from GitHub:
+
+```bash
+pip install "ishmael-insights-api @ git+https://github.com/ryderrhoads/Ishmael-Insights-API.git@main"
+```
+
+Pin to a tag/commit (recommended for production):
+
+```bash
+pip install "ishmael-insights-api @ git+https://github.com/ryderrhoads/Ishmael-Insights-API.git@v0.2.1"
+# or
+pip install "ishmael-insights-api @ git+https://github.com/ryderrhoads/Ishmael-Insights-API.git@2afce67"
+```
+
+`requirements.txt` example:
+
+```txt
+ishmael-insights-api @ git+https://github.com/ryderrhoads/Ishmael-Insights-API.git@main
 ```
 
 ## Quickstart
