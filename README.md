@@ -49,7 +49,7 @@ Output files (default `exports/`):
 - `cbb_teams.csv`
 - `cbb_games_today.csv`
 - `cbb_predictions_latest.csv`
-- `cbb_predictions_for_today_games.csv`
+- `cbb_predictions_for_today_games.csv` (queried directly by each exported game `condition_id`)
 
 You can override via env vars:
 
@@ -57,6 +57,10 @@ You can override via env vars:
 - `BASE_URL` (default `https://ishmaelinsights.com`)
 - `LEAGUE` (default `cbb`)
 - `OUT_DIR` (default `exports`)
+- `TIMEZONE` (default `America/Los_Angeles`)
+- `TARGET_DATE` / `DATE` (`YYYY-MM-DD`, default = current date in `TIMEZONE`)
+
+The exporter uses **local-day filtering** (with timezone) to avoid UTC day-boundary drift pulling yesterday/tomorrow games.
 
 ## Dev
 

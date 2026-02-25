@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import csv
 import os
+import re
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from ishmael_insights_api import IshmaelInsightsAPI, IshmaelInsightsAPIError
 
@@ -13,6 +15,9 @@ try:
     from dotenv import load_dotenv
 except Exception:  # optional dependency
     load_dotenv = None
+
+
+_SLUG_DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})$")
 
 
 def _load_env_file(path: Path) -> None:
@@ -26,6 +31,71 @@ def _load_env_file(path: Path) -> None:
         key = key.strip()
         value = value.strip().strip('"').strip("'")
         os.environ.setdefault(key, value)
+
+
+def _resolve_timezone() -> ZoneInfo:
+    tz_name = os.getenv("TIMEZONE", "America/Los_Angeles").strip() or "America/Los_Angeles"
+    try:
+        return ZoneInfo(tz_name)
+    except Exception:
+        print(f"Warning: invalid TIMEZONE={tz_name!r}. Falling back to America/Los_Angeles")
+        return ZoneInfo("America/Los_Angeles")
+
+
+def _resolve_target_date(tz: ZoneInfo) -> date:
+    raw = (os.getenv("TARGET_DATE") or os.getenv("DATE") or "").strip()
+    if raw:
+        try:
+            return date.fromisoformat(raw)
+        except Exception:
+            print(f"Warning: invalid TARGET_DATE/DATE={raw!r}. Falling back to current date in {tz.key}.")
+    return datetime.now(tz).date()
+
+
+def _slug_date(slug: str | None) -> str | None:
+    s = str(slug or "").strip()
+    if not s:
+        return None
+    m = _SLUG_DATE_RE.search(s)
+    return m.group(1) if m else None
+
+
+def _game_is_on_target_day(game: dict, *, target_date_iso: str, tz: ZoneInfo) -> bool:
+    # Primary: game_time interpreted in requested timezone.
+    gt = game.get("game_time")
+    if gt is not None:
+        try:
+            local_day = datetime.fromtimestamp(int(gt), tz=timezone.utc).astimezone(tz).date().isoformat()
+            if local_day == target_date_iso:
+                return True
+        except Exception:
+            pass
+
+    # Fallback: some docs have mismatched game_time; slug usually carries YYYY-MM-DD.
+    return _slug_date(game.get("slug")) == target_date_iso
+
+
+def _fetch_predictions_for_condition_ids(
+    client: IshmaelInsightsAPI,
+    *,
+    decision_time: int,
+    condition_ids: set[str],
+) -> list[dict]:
+    out: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+
+    for cid in sorted(c for c in condition_ids if c):
+        payload = client.get_predictions(time=decision_time, condition_id=cid, limit=100)
+        for item in payload.get("items", []):
+            if not isinstance(item, dict):
+                continue
+            key = (str(item.get("condition_id") or ""), str(item.get("outcome") or ""))
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(item)
+
+    return out
 
 
 def _write_csv(path: Path, rows: list[dict]) -> None:
@@ -64,36 +134,70 @@ def main() -> int:
         print("Missing API_KEY. Set it in EXAMPLE.env or environment.")
         return 1
 
+    tz = _resolve_timezone()
+    target_day = _resolve_target_date(tz)
+    target_day_iso = target_day.isoformat()
+
+    # Wide query window + strict local-day filtering:
+    # catches normal rows by game_time and outliers where game_time can drift.
+    start_local = datetime(target_day.year, target_day.month, target_day.day, 0, 0, 0, tzinfo=tz)
+    end_local = datetime(target_day.year, target_day.month, target_day.day, 23, 59, 59, tzinfo=tz)
+    query_start = start_local - timedelta(hours=24)
+    query_end = end_local + timedelta(hours=24)
+
     client = IshmaelInsightsAPI(api_key=api_key, base_url=base_url)
 
-    now_utc = datetime.now(timezone.utc)
-    start_utc = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
-    end_utc = start_utc + timedelta(days=1) - timedelta(seconds=1)
-
     try:
+        print(f"Timezone: {tz.key}")
+        print(f"Target date: {target_day_iso}")
+        print(
+            "Game query window (epoch): "
+            f"{int(query_start.timestamp())} -> {int(query_end.timestamp())}"
+        )
+
         print(f"Fetching all {league.upper()} teams...")
         teams = list(client.iter_teams(league=league))
 
-        print(f"Fetching today's {league.upper()} games...")
-        games = list(
+        print(f"Fetching {league.upper()} games near target day...")
+        raw_games = list(
             client.iter_games(
                 league=league,
-                start_date=start_utc,
-                end_date=end_utc,
+                start_date=int(query_start.timestamp()),
+                end_date=int(query_end.timestamp()),
             )
         )
 
-        print(f"Fetching latest {league.upper()} model predictions...")
-        predictions = list(client.iter_predictions(time=int(time.time()), tag=league))
+        games = [
+            g
+            for g in raw_games
+            if _game_is_on_target_day(g, target_date_iso=target_day_iso, tz=tz)
+        ]
+
+        # Deduplicate by condition_id (stable if same row appears more than once).
+        by_cid: dict[str, dict] = {}
+        for g in games:
+            cid = str(g.get("condition_id") or "").strip()
+            if cid:
+                by_cid[cid] = g
+        games = list(by_cid.values()) if by_cid else games
+
+        decision_time = int(time.time())
+
+        print(f"Fetching latest {league.upper()} model predictions (tag-scoped)...")
+        predictions = list(client.iter_predictions(time=decision_time, tag=league))
 
         today_condition_ids = {
             str(g.get("condition_id", "")).strip()
             for g in games
             if g.get("condition_id")
         }
-        today_predictions = [
-            p for p in predictions if str(p.get("condition_id", "")).strip() in today_condition_ids
-        ]
+
+        print("Fetching predictions specifically for today's game condition_ids...")
+        today_predictions = _fetch_predictions_for_condition_ids(
+            client,
+            decision_time=decision_time,
+            condition_ids=today_condition_ids,
+        )
 
         teams_csv = out_dir / f"{league}_teams.csv"
         games_csv = out_dir / f"{league}_games_today.csv"
@@ -107,9 +211,9 @@ def main() -> int:
 
         print("Done:")
         print(f"- teams: {len(teams)} -> {teams_csv}")
-        print(f"- games today: {len(games)} -> {games_csv}")
+        print(f"- games on {target_day_iso}: {len(games)} -> {games_csv}")
         print(f"- predictions (latest): {len(predictions)} -> {preds_csv}")
-        print(f"- predictions (today's games): {len(today_predictions)} -> {today_preds_csv}")
+        print(f"- predictions (target day's games): {len(today_predictions)} -> {today_preds_csv}")
         return 0
 
     except IshmaelInsightsAPIError as e:
