@@ -19,9 +19,9 @@ pip install "ishmael-insights-api @ git+https://github.com/ryderrhoads/Ishmael-I
 Pin to a tag/commit (recommended for production):
 
 ```bash
-pip install "ishmael-insights-api @ git+https://github.com/ryderrhoads/Ishmael-Insights-API.git@v0.2.1"
-# or
-pip install "ishmael-insights-api @ git+https://github.com/ryderrhoads/Ishmael-Insights-API.git@2afce67"
+pip install "ishmael-insights-api @ git+https://github.com/ryderrhoads/Ishmael-Insights-API.git@v0.2.2"
+# or pin to an exact commit
+pip install "ishmael-insights-api @ git+https://github.com/ryderrhoads/Ishmael-Insights-API.git@<commit_sha>"
 ```
 
 `requirements.txt` example:
@@ -47,6 +47,15 @@ preds = client.get_predictions(
     limit=50,
 )
 print(preds.get("count"), "rows")
+
+# Date-based games query (recommended for "today" workflows)
+games = client.get_games(
+    league="cbb",
+    game_date="2026-02-24",
+    timezone="America/Los_Angeles",
+    limit=200,
+)
+print(games.get("count"), "games")
 ```
 
 ## Endpoints wrapped
@@ -57,6 +66,14 @@ print(preds.get("count"), "rows")
 - `GET /api/v1/game` → `get_game(...)`
 - `GET /api/v1/teams` → `get_teams(...)`, `iter_teams(...)`
 - `GET /api/v1/team` → `get_team(...)`
+
+`get_games(...)` / `iter_games(...)` support two query modes:
+
+1. **Date mode (recommended):**
+   - `league`, `game_date`
+   - optional `timezone` (IANA, e.g. `America/Los_Angeles`)
+2. **Time-range mode (legacy/back-compat):**
+   - `league`, `start_date`, `end_date`
 
 ## CBB CSV export sample
 

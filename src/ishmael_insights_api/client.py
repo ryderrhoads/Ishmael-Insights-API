@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -24,6 +25,38 @@ def _unixish(value: int | float | str | datetime) -> int | float | str:
     if isinstance(value, datetime):
         return int(value.timestamp())
     return value
+
+
+def _coerce_date(value: str | date | datetime) -> date:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+
+    s = str(value).strip()
+    if not s:
+        raise ValueError("game_date cannot be empty")
+
+    # Fast path for YYYY-MM-DD and ISO-like strings.
+    if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+        return date.fromisoformat(s[:10])
+
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00")).date()
+    except Exception as exc:  # pragma: no cover - defensive
+        raise ValueError(f"Invalid game_date: {value!r}") from exc
+
+
+def _local_day_epoch_bounds(day: date, timezone_name: str | None) -> tuple[int, int]:
+    tz = timezone_name or "UTC"
+    try:
+        zone = ZoneInfo(tz)
+    except Exception:
+        zone = ZoneInfo("UTC")
+
+    start = datetime(day.year, day.month, day.day, 0, 0, 0, tzinfo=zone)
+    end = start + timedelta(days=1) - timedelta(seconds=1)
+    return int(start.timestamp()), int(end.timestamp())
 
 
 def _csv(values: str | Iterable[Any] | None) -> str | None:
@@ -61,7 +94,7 @@ class IshmaelInsightsAPI:
     def _headers(self) -> dict[str, str]:
         return {
             "x-api-key": self.api_key,
-            "User-Agent": "ishmael-insights-api-python/0.2.0",
+            "User-Agent": "ishmael-insights-api-python/0.2.2",
             "Accept": "application/json",
         }
 
@@ -185,48 +218,94 @@ class IshmaelInsightsAPI:
         self,
         *,
         league: str,
-        start_date: str | int | float | date | datetime,
-        end_date: str | int | float | date | datetime,
+        game_date: str | date | datetime | None = None,
+        timezone: str | None = None,
+        start_date: str | int | float | date | datetime | None = None,
+        end_date: str | int | float | date | datetime | None = None,
         team_ids: str | Iterable[str | int] | None = None,
         limit: int | None = 50,
         min_volume: float | None = None,
         cursor: str | None = None,
     ) -> dict[str, Any]:
+        if game_date is None and (start_date is None or end_date is None):
+            raise ValueError("Provide game_date OR both start_date and end_date")
+
         params = {
             "league": league,
-            "start_date": _isoish(start_date),
-            "end_date": _isoish(end_date),
+            "game_date": _isoish(game_date) if game_date is not None else None,
+            "timezone": timezone,
+            "start_date": _isoish(start_date) if start_date is not None else None,
+            "end_date": _isoish(end_date) if end_date is not None else None,
             "team_ids": _csv(team_ids),
             "limit": limit,
             "min_volume": min_volume,
             "cursor": cursor,
         }
-        return self._request("GET", "/games", params=params)
+
+        try:
+            return self._request("GET", "/games", params=params)
+        except IshmaelInsightsAPIError as exc:
+            # Backward-compat fallback for older server deployments that don't
+            # support `game_date` yet and require start/end timestamps.
+            if (
+                game_date is not None
+                and start_date is None
+                and end_date is None
+                and exc.status_code == 400
+                and "start_date and end_date" in str(exc.message).lower()
+            ):
+                day = _coerce_date(game_date)
+                start_ts, end_ts = _local_day_epoch_bounds(day, timezone)
+                fallback_params = {
+                    **params,
+                    "game_date": None,
+                    "timezone": None,
+                    "start_date": start_ts,
+                    "end_date": end_ts,
+                }
+                return self._request("GET", "/games", params=fallback_params)
+            raise
 
     def iter_games(
         self,
         *,
         league: str,
-        start_date: str | int | float | date | datetime,
-        end_date: str | int | float | date | datetime,
+        game_date: str | date | datetime | None = None,
+        timezone: str | None = None,
+        start_date: str | int | float | date | datetime | None = None,
+        end_date: str | int | float | date | datetime | None = None,
         team_ids: str | Iterable[str | int] | None = None,
         min_volume: float | None = None,
         page_limit: int = 500,
         cursor: str | None = None,
     ) -> Iterator[dict[str, Any]]:
-        params = {
-            "league": league,
-            "start_date": _isoish(start_date),
-            "end_date": _isoish(end_date),
-            "team_ids": _csv(team_ids),
-            "min_volume": min_volume,
-        }
-        return self._iter_items(
-            "/games",
-            base_params=params,
-            page_limit=page_limit,
-            cursor=cursor,
-        )
+        if game_date is None and (start_date is None or end_date is None):
+            raise ValueError("Provide game_date OR both start_date and end_date")
+
+        next_cursor = cursor
+        while True:
+            payload = self.get_games(
+                league=league,
+                game_date=game_date,
+                timezone=timezone,
+                start_date=start_date,
+                end_date=end_date,
+                team_ids=team_ids,
+                limit=page_limit,
+                min_volume=min_volume,
+                cursor=next_cursor,
+            )
+            items = payload.get("items")
+            if not isinstance(items, list):
+                return
+            for item in items:
+                if isinstance(item, dict):
+                    yield item
+                else:
+                    yield {"value": item}
+            next_cursor = payload.get("next_cursor")
+            if not next_cursor:
+                return
 
     def get_game(
         self,

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 from dotenv import load_dotenv
 
@@ -17,9 +17,7 @@ def main() -> int:
     base_url = os.getenv("BASE_URL", "https://ishmaelinsights.com")
     client = IshmaelInsightsAPI(api_key=api_key, base_url=base_url)
 
-    now = datetime.now(timezone.utc)
-    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    end = start + timedelta(days=1) - timedelta(seconds=1)
+    today = datetime.now().date().isoformat()
 
     try:
         print("Auth check:")
@@ -37,8 +35,8 @@ def main() -> int:
         print("\nToday's CBB games:")
         games = client.get_games(
             league="cbb",
-            start_date=start,
-            end_date=end,
+            game_date=today,
+            timezone="America/Los_Angeles",
             limit=5,
         )
         print(games)
