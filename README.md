@@ -56,6 +56,9 @@ games = client.get_games(
     limit=200,
 )
 print(games.get("count"), "games")
+
+markets = client.get_markets(source="all", status="open", q="nba", limit=25)
+print(markets.get("count"), "markets")
 ```
 
 ## Endpoints wrapped
@@ -66,6 +69,8 @@ print(games.get("count"), "games")
 - `GET /api/v1/game` → `get_game(...)`
 - `GET /api/v1/teams` → `get_teams(...)`, `iter_teams(...)`
 - `GET /api/v1/team` → `get_team(...)`
+- `GET /api/v1/markets` → `get_markets(...)`, `iter_markets(...)`
+- `GET /api/v1/market` → `get_market(...)`
 
 `get_games(...)` / `iter_games(...)` support two query modes:
 

@@ -94,7 +94,7 @@ class IshmaelInsightsAPI:
     def _headers(self) -> dict[str, str]:
         return {
             "x-api-key": self.api_key,
-            "User-Agent": "ishmael-insights-api-python/0.2.2",
+            "User-Agent": "ishmael-insights-api-python/0.2.3",
             "Accept": "application/json",
         }
 
@@ -378,3 +378,67 @@ class IshmaelInsightsAPI:
             "league": league,
         }
         return self._request("GET", "/team", params=params)
+
+    def get_markets(
+        self,
+        *,
+        source: str | None = "all",
+        status: str | None = None,
+        q: str | None = None,
+        search: str | None = None,
+        limit: int | None = 50,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        params = {
+            "source": source,
+            "status": status,
+            "q": q,
+            "search": search,
+            "limit": limit,
+            "cursor": cursor,
+        }
+        return self._request("GET", "/markets", params=params)
+
+    def iter_markets(
+        self,
+        *,
+        source: str | None = "all",
+        status: str | None = None,
+        q: str | None = None,
+        search: str | None = None,
+        page_limit: int = 500,
+        cursor: str | None = None,
+    ) -> Iterator[dict[str, Any]]:
+        params = {
+            "source": source,
+            "status": status,
+            "q": q,
+            "search": search,
+        }
+        return self._iter_items(
+            "/markets",
+            base_params=params,
+            page_limit=page_limit,
+            cursor=cursor,
+        )
+
+    def get_market(
+        self,
+        *,
+        source: str | None = None,
+        condition_id: str | None = None,
+        slug: str | None = None,
+        ticker: str | None = None,
+        polymarket_id: int | str | None = None,
+    ) -> dict[str, Any]:
+        if not any([condition_id, slug, ticker, polymarket_id is not None]):
+            raise ValueError("Provide one of: condition_id, slug, ticker, polymarket_id")
+
+        params = {
+            "source": source,
+            "condition_id": condition_id,
+            "slug": slug,
+            "ticker": ticker,
+            "polymarket_id": str(polymarket_id) if polymarket_id is not None else None,
+        }
+        return self._request("GET", "/market", params=params)
