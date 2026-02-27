@@ -94,7 +94,7 @@ class IshmaelInsightsAPI:
     def _headers(self) -> dict[str, str]:
         return {
             "x-api-key": self.api_key,
-            "User-Agent": "ishmael-insights-api-python/0.2.3",
+            "User-Agent": "ishmael-insights-api-python/0.2.4",
             "Accept": "application/json",
         }
 
@@ -213,6 +213,31 @@ class IshmaelInsightsAPI:
             page_limit=page_limit,
             cursor=cursor,
         )
+
+    def get_predictions_history(
+        self,
+        *,
+        condition_id: str,
+        strategy_id: str | None = None,
+        outcome: str | None = None,
+    ) -> dict[str, Any]:
+        if not condition_id:
+            raise ValueError("condition_id is required")
+        params = {
+            "condition_id": condition_id,
+            "strategy_id": strategy_id,
+            "outcome": outcome,
+        }
+        return self._request("GET", "/predictions-history", params=params)
+
+    def get_price_history(
+        self,
+        *,
+        condition_id: str,
+    ) -> dict[str, Any]:
+        if not condition_id:
+            raise ValueError("condition_id is required")
+        return self._request("GET", "/price-history", params={"condition_id": condition_id})
 
     def get_games(
         self,

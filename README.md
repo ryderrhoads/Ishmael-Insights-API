@@ -19,7 +19,7 @@ pip install "ishmael-insights-api @ git+https://github.com/ryderrhoads/Ishmael-I
 Pin to a tag/commit (recommended for production):
 
 ```bash
-pip install "ishmael-insights-api @ git+https://github.com/ryderrhoads/Ishmael-Insights-API.git@v0.2.2"
+pip install "ishmael-insights-api @ git+https://github.com/ryderrhoads/Ishmael-Insights-API.git@v0.2.4"
 # or pin to an exact commit
 pip install "ishmael-insights-api @ git+https://github.com/ryderrhoads/Ishmael-Insights-API.git@<commit_sha>"
 ```
@@ -48,6 +48,12 @@ preds = client.get_predictions(
 )
 print(preds.get("count"), "rows")
 
+pred_hist = client.get_predictions_history(condition_id="0x...")
+print(pred_hist.get("window_hours"), "hours of prediction history")
+
+price_hist = client.get_price_history(condition_id="0x...")
+print(price_hist.get("window_hours"), "hours of price history")
+
 # Date-based games query (recommended for "today" workflows)
 games = client.get_games(
     league="cbb",
@@ -65,6 +71,8 @@ print(markets.get("count"), "markets")
 
 - `POST /api/v1/auth/check` → `auth_check()`
 - `GET /api/v1/predictions` → `get_predictions(...)`, `iter_predictions(...)`
+- `GET /api/v1/predictions-history` → `get_predictions_history(...)`
+- `GET /api/v1/price-history` → `get_price_history(...)`
 - `GET /api/v1/games` → `get_games(...)`, `iter_games(...)`
 - `GET /api/v1/game` → `get_game(...)`
 - `GET /api/v1/teams` → `get_teams(...)`, `iter_teams(...)`
